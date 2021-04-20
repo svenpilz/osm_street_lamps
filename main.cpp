@@ -58,6 +58,10 @@ struct StringAttributeMap {
         lit = i;
       } else if (s == "no") {
         no = i;
+      } else if (s == "tower:type") {
+        tower_type = i;
+      } else if (s == "lighting") {
+        lighting = i;
       }
     }
   }
@@ -66,6 +70,8 @@ struct StringAttributeMap {
   std::uint32_t street_lamp = 0;
   std::uint32_t lit = 0;
   std::uint32_t no = 0;
+  std::uint32_t tower_type = 0;
+  std::uint32_t lighting = 0;
 };
 
 struct BoundingBox {
@@ -202,6 +208,11 @@ size_t read_pbf_segment(std::ifstream &stream,
     const StringAttributeMap strings{block};
 
     for (const auto &group : block.primitivegroup()) {
+      const auto is_street_lamp = [&](const auto &...args) {
+        return has_attribute(args..., strings.highway, strings.street_lamp) ||
+               has_attribute(args..., strings.tower_type, strings.lighting);
+      };
+
       //
       // Nodes
       //
@@ -209,12 +220,10 @@ size_t read_pbf_segment(std::ifstream &stream,
           group.nodes().begin(), group.nodes().end(),
           std::inserter(points, points.begin()),
           [&](const auto &node) -> std::decay_t<decltype(points)>::value_type {
-            const auto is_street_lamp =
-                has_attribute(node, strings.highway, strings.street_lamp);
             return {std::piecewise_construct, std::forward_as_tuple(node.id()),
                     std::forward_as_tuple(unpackLongitude(node.lon()),
                                           unpackLatitude(node.lat()),
-                                          is_street_lamp)};
+                                          is_street_lamp(node))};
           });
 
       //
@@ -237,13 +246,10 @@ size_t read_pbf_segment(std::ifstream &stream,
 
           const auto keys = attr | stride(2);
           const auto vals = attr | tail | stride(2);
-          const auto is_street_lamp =
-              has_attribute(keys, vals, strings.highway, strings.street_lamp);
-
           points.emplace(std::piecewise_construct, std::forward_as_tuple(id),
                          std::forward_as_tuple(unpackLongitude(packedLon),
                                                unpackLatitude(packedLat),
-                                               is_street_lamp));
+                                               is_street_lamp(keys, vals)));
         }
       }
 
